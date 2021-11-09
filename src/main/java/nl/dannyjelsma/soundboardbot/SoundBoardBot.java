@@ -78,7 +78,7 @@ public class SoundBoardBot {
         cmdBuilder.addCommands(new JoinCommand(), new GenerateCommand(), new RefreshCommand(), new TTSCommand(),
                 new PlaylistCommand(), new ShuffleCommand(), new PlayCommand(), new TTSAnnounceCommand(), new VolumeCommand(),
                 new StopCommand(), new PauseCommand(), new SkipCommand(), new PlaylistsCommand(), new QueueCommand(),
-                new RemoveCommand(), new TranslateCommand(), new LoopCommand());
+                new RemoveCommand(), new LoopCommand());
         CommandClient cmdClient = cmdBuilder.build();
 
         builder.addEventListeners(cmdClient, new NewGuildListener());
