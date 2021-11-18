@@ -1,5 +1,8 @@
 package nl.dannyjelsma.soundboardbot.controllers;
 
+import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
+import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
+import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import nl.dannyjelsma.soundboardbot.APIKeys;
 import nl.dannyjelsma.soundboardbot.SoundBoardBot;
@@ -19,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,7 +30,7 @@ import java.util.Map;
 @RestController
 public class SoundController {
 
-    @GetMapping("/sounds")
+    @GetMapping("/soundboard/sounds")
     public List<Sound> getSounds(@RequestHeader("X-API-KEY") String apiKey) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
@@ -35,7 +39,12 @@ public class SoundController {
         return SoundManager.getInstance().getSounds();
     }
 
-    @DeleteMapping("/sound/{soundName}")
+    @GetMapping("/soundboard/testkey")
+    public boolean testAPIKey(@RequestHeader("X-API-KEY") String apiKey) {
+        return isKeyValid(apiKey);
+    }
+
+    @DeleteMapping("/soundboard/sound/{soundName}")
     public void deleteSound(@RequestHeader("X-API-KEY") String apiKey, @PathVariable String soundName) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
@@ -60,7 +69,7 @@ public class SoundController {
         }
     }
 
-    @PostMapping("/sound/{soundName}")
+    @PostMapping("/soundboard/sound/{soundName}")
     public void uploadSound(@RequestHeader("X-API-KEY") String apiKey, @PathVariable String soundName, @RequestParam(value = "url") String url) throws InterruptedException, IOException {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
@@ -95,7 +104,7 @@ public class SoundController {
     }
 
 
-    @GetMapping("/sound/{soundName}")
+    @GetMapping("/soundboard/sound/{soundName}")
     public Sound getSound(@RequestHeader("X-API-KEY") String apiKey, @PathVariable String soundName) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
@@ -109,8 +118,8 @@ public class SoundController {
         return SoundManager.getInstance().getSound(soundName);
     }
 
-    @GetMapping("/state")
-    public Map<String, Object> getSound(@RequestHeader("X-API-KEY") String apiKey) {
+    @GetMapping("/soundboard/state")
+    public Map<String, Object> getState(@RequestHeader("X-API-KEY") String apiKey) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
         }
@@ -120,19 +129,37 @@ public class SoundController {
         SoundScheduler scheduler = manager.getScheduler();
 
         List<AudioTrack> musicQueue = scheduler.getMusicQueue();
+        List<String> musicNames = new ArrayList<>();
         List<AudioTrack> soundboardQueue = scheduler.getMusicQueue();
+        List<String> soundboardNames = new ArrayList<>();
         AudioTrack playingTrack = manager.getAudioPlayer().getPlayingTrack();
+        String playingTrackName;
+
+        if (playingTrack != null) {
+            playingTrackName = playingTrack.getInfo().title + " - " + playingTrack.getInfo().author;
+        } else {
+            playingTrackName = "None";
+        }
+
         int volume = manager.getAudioPlayer().getVolume();
 
-        state.put("musicQueue", musicQueue);
-        state.put("soundboardQueue", soundboardQueue);
-        state.put("playingTrack", playingTrack);
+        for (AudioTrack track : musicQueue) {
+            musicNames.add(track.getInfo().title + " - " + track.getInfo().author);
+        }
+
+        for (AudioTrack track : soundboardQueue) {
+            soundboardNames.add(track.getInfo().title + " - " + track.getInfo().author);
+        }
+
+        state.put("musicQueue", musicNames);
+        state.put("soundboardQueue", soundboardNames);
+        state.put("playingTrack", playingTrackName);
         state.put("volume", volume);
 
         return state;
     }
 
-    @GetMapping("/skip")
+    @GetMapping("/soundboard/skip")
     public void skipSound(@RequestHeader("X-API-KEY") String apiKey) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
@@ -142,7 +169,7 @@ public class SoundController {
         manager.getAudioPlayer().stopTrack();
     }
 
-    @GetMapping("/stop")
+    @GetMapping("/soundboard/stop")
     public void stopSound(@RequestHeader("X-API-KEY") String apiKey) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
@@ -152,8 +179,8 @@ public class SoundController {
         manager.getScheduler().stop();
     }
 
-    @PostMapping("/TTS")
-    public void stopSound(@RequestHeader("X-API-KEY") String apiKey, @RequestParam(value = "voice") String voice, @RequestParam(value = "message") String message) {
+    @PostMapping("/soundboard/TTS")
+    public void playTTS(@RequestHeader("X-API-KEY") String apiKey, @RequestParam(value = "voice") String voice, @RequestParam(value = "message") String message) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
         }
@@ -164,7 +191,7 @@ public class SoundController {
         tts.playSpeechFromURL(url);
     }
 
-    @GetMapping("/volume")
+    @GetMapping("/soundboard/volume")
     public int getVolume(@RequestHeader("X-API-KEY") String apiKey) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
@@ -174,7 +201,7 @@ public class SoundController {
         return manager.getAudioPlayer().getVolume();
     }
 
-    @PostMapping("/volume")
+    @PostMapping("/soundboard/volume")
     public void setVolume(@RequestHeader("X-API-KEY") String apiKey, @RequestParam(value = "volume") int volume) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
@@ -184,28 +211,41 @@ public class SoundController {
         manager.getAudioPlayer().setVolume(volume);
     }
 
-    @GetMapping("/play/{soundName}")
+    @GetMapping("/soundboard/play/{soundName}")
     public void playSound(@RequestHeader("X-API-KEY") String apiKey, @PathVariable String soundName) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
         }
 
-        File file = new File("." + File.separator + "sounds" + File.separator + soundName);
-        if (!file.exists()) {
+        SoundManager manager = SoundManager.getInstance();
+        if (!manager.hasSound(soundName)) {
             throw new SoundNotFoundException();
         } else {
-            File[] files = file.listFiles();
+            Sound sound = manager.getSound(soundName);
 
-            if (files != null && files.length > 0) {
-                for (File dirFile : files) {
-                    dirFile.delete();
+            manager.getAudioPlayerManager().loadItemOrdered(manager, sound.file().getAbsolutePath(), new AudioLoadResultHandler() {
+                @Override
+                public void trackLoaded(AudioTrack track) {
+                    manager.getScheduler().queue(track, true);
                 }
-            }
 
-            SoundManager manager = SoundManager.getInstance();
-            manager.clearSounds();
-            manager.loadSounds();
-            file.delete();
+                @Override
+                public void playlistLoaded(AudioPlaylist playlist) {
+                    for (AudioTrack track : playlist.getTracks()) {
+                        manager.getScheduler().queue(track, true);
+                    }
+                }
+
+                @Override
+                public void noMatches() {
+                    throw new SoundNotFoundException();
+                }
+
+                @Override
+                public void loadFailed(FriendlyException exception) {
+                    throw exception;
+                }
+            });
         }
     }
 

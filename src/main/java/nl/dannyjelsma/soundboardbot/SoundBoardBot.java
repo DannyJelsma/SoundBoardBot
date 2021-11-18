@@ -31,7 +31,9 @@ import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -50,7 +52,10 @@ public class SoundBoardBot {
         }
 
         SpringApplication app = new SpringApplication(SoundBoardBot.class);
-        app.setDefaultProperties(Collections.singletonMap("server.port", "32944"));
+        Map<String, Object> properties = new HashMap<>();
+        properties.put("logging.level.root", "INFO");
+        properties.put("server.port", "32944");
+        app.setDefaultProperties(properties);
         app.run(args);
 
         File youtubeDL = new File("yt-dlp");
@@ -74,6 +79,7 @@ public class SoundBoardBot {
         CommandClientBuilder cmdBuilder = new CommandClientBuilder();
         JDABuilder builder = JDABuilder.createDefault(args[0]);
 
+        cmdBuilder.setOwnerId("160687007369134080");
         cmdBuilder.setPrefix("=");
         cmdBuilder.addCommands(new JoinCommand(), new GenerateCommand(), new RefreshCommand(), new TTSCommand(),
                 new PlaylistCommand(), new ShuffleCommand(), new PlayCommand(), new TTSAnnounceCommand(), new VolumeCommand(),
@@ -126,50 +132,48 @@ public class SoundBoardBot {
             soundsFolder.mkdir();
         }
 
-        new Thread(() -> {
-            System.out.println("BACKGROUND: Filling audio cache with playlist songs...");
-            PlaylistManager playlistManager = new PlaylistManager();
-            List<File> playlistFiles = playlistManager.getPlaylists();
-            SoundManager manager = SoundManager.getInstance();
+        System.out.println("BACKGROUND: Filling audio cache with playlist songs...");
+        PlaylistManager playlistManager = new PlaylistManager();
+        List<File> playlistFiles = playlistManager.getPlaylists();
+        SoundManager manager = SoundManager.getInstance();
 
-            for (File playlistFile : playlistFiles) {
-                PlaylistLoadResult loadResult = playlistManager.loadPlaylist(playlistFile.getName().replace(".json", ""));
+        for (File playlistFile : playlistFiles) {
+            PlaylistLoadResult loadResult = playlistManager.loadPlaylist(playlistFile.getName().replace(".json", ""));
 
-                if (loadResult.isSuccess()) {
-                    Playlist playlist = loadResult.getPlaylist();
+            if (loadResult.isSuccess()) {
+                Playlist playlist = loadResult.getPlaylist();
 
-                    for (Song song : playlist.getSongs()) {
-                        executor.execute(() -> {
-                            try {
-                                soundManager.getAudioPlayerManager().loadItemOrdered(manager, song.getUrl(), new AudioLoadResultHandler() {
-                                    @Override
-                                    public void trackLoaded(AudioTrack track) {
-                                        soundManager.addToCache(song.getUrl(), track);
-                                    }
+                for (Song song : playlist.getSongs()) {
+                    executor.execute(() -> {
+                        try {
+                            soundManager.getAudioPlayerManager().loadItemOrdered(manager, song.getUrl(), new AudioLoadResultHandler() {
+                                @Override
+                                public void trackLoaded(AudioTrack track) {
+                                    soundManager.addToCache(song.getUrl(), track);
+                                }
 
-                                    @Override
-                                    public void playlistLoaded(AudioPlaylist playlist) {
-                                        soundManager.addToCache(song.getUrl(), playlist.getTracks().get(0));
-                                    }
+                                @Override
+                                public void playlistLoaded(AudioPlaylist playlist) {
+                                    soundManager.addToCache(song.getUrl(), playlist.getTracks().get(0));
+                                }
 
-                                    @Override
-                                    public void noMatches() {
-                                    }
+                                @Override
+                                public void noMatches() {
+                                }
 
-                                    @Override
-                                    public void loadFailed(FriendlyException exception) {
-                                    }
-                                }).get();
-                            } catch (InterruptedException | ExecutionException e) {
-                                e.printStackTrace();
-                            }
-                        });
-                    }
-                } else {
-                    System.out.println("Couldn't load playlist " + playlistFile.getName() + ": " + loadResult.getMessage());
+                                @Override
+                                public void loadFailed(FriendlyException exception) {
+                                }
+                            }).get();
+                        } catch (InterruptedException | ExecutionException e) {
+                            e.printStackTrace();
+                        }
+                    });
                 }
+            } else {
+                System.out.println("Couldn't load playlist " + playlistFile.getName() + ": " + loadResult.getMessage());
             }
-        }).start();
+        }
     }
 
     public static JDA getJDA() {
