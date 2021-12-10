@@ -14,6 +14,7 @@ import nl.dannyjelsma.soundboardbot.exceptions.SoundAlreadyExistsException;
 import nl.dannyjelsma.soundboardbot.exceptions.SoundNotFoundException;
 import nl.dannyjelsma.soundboardbot.exceptions.UnauthorizedException;
 import nl.dannyjelsma.soundboardbot.tts.TTSClient;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.BufferedReader;
@@ -22,10 +23,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @RestController
 public class SoundController {
@@ -70,14 +68,14 @@ public class SoundController {
     }
 
     @PostMapping("/soundboard/sound/{soundName}")
-    public void uploadSound(@RequestHeader("X-API-KEY") String apiKey, @PathVariable String soundName, @RequestParam(value = "url") String url) throws InterruptedException, IOException {
+    public void uploadSound(@RequestHeader("X-API-KEY") String apiKey, @PathVariable String soundName, @RequestBody MultiValueMap<String, String> body) throws InterruptedException, IOException {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
         }
 
         try {
-            new URL(url);
-        } catch (MalformedURLException e) {
+            new URL(Objects.requireNonNull(body.getFirst("url")));
+        } catch (Exception e) {
             throw new InvalidURLException();
         }
 
@@ -89,7 +87,7 @@ public class SoundController {
             file.getParentFile().mkdir();
         }
 
-        Process process = new ProcessBuilder("." + File.separator + "yt-dlp", "-f", "bestaudio[ext=m4a]", "--extract-audio", "--audio-format", "mp3", "-o", file.getAbsolutePath(), url.toString()).redirectErrorStream(true).start();
+        Process process = new ProcessBuilder("." + File.separator + "yt-dlp", "-f", "bestaudio[ext=m4a]", "--extract-audio", "--audio-format", "mp3", "-o", file.getAbsolutePath(), body.toString()).redirectErrorStream(true).start();
         BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
         String line;
         while ((line = in.readLine()) != null) {
@@ -180,13 +178,13 @@ public class SoundController {
     }
 
     @PostMapping("/soundboard/TTS")
-    public void playTTS(@RequestHeader("X-API-KEY") String apiKey, @RequestParam(value = "voice") String voice, @RequestParam(value = "message") String message) {
+    public void playTTS(@RequestHeader("X-API-KEY") String apiKey, @RequestBody MultiValueMap<String, String> body) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
         }
 
-        TTSClient tts = new TTSClient(voice);
-        String url = tts.getSpeechURL(message);
+        TTSClient tts = new TTSClient(body.getFirst("voice"));
+        String url = tts.getSpeechURL(body.getFirst("message"));
 
         tts.playSpeechFromURL(url);
     }
@@ -202,13 +200,13 @@ public class SoundController {
     }
 
     @PostMapping("/soundboard/volume")
-    public void setVolume(@RequestHeader("X-API-KEY") String apiKey, @RequestParam(value = "volume") int volume) {
+    public void setVolume(@RequestHeader("X-API-KEY") String apiKey, @RequestBody MultiValueMap<String, Integer> body) {
         if (!isKeyValid(apiKey)) {
             throw new UnauthorizedException();
         }
 
         SoundManager manager = SoundManager.getInstance();
-        manager.getAudioPlayer().setVolume(volume);
+        manager.getAudioPlayer().setVolume(Objects.requireNonNull(body.getFirst("volume")));
     }
 
     @GetMapping("/soundboard/play/{soundName}")
